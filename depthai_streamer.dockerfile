@@ -30,7 +30,8 @@ RUN apt install -y \
 
 RUN apt install -y libusb-1.0-0 libusb-1.0-0-dev
 
-RUN apt install -y ros-humble-rmw-cyclonedds-cpp
+RUN apt update
+RUN apt install -y ros-humble-rmw-cyclonedds-cpp ros-humble-rtabmap-ros
 
 # quac
 

@@ -53,14 +53,22 @@ void DepthaiStreamer::run()
 
   dai.stereo_depth_node->depth.link(dai.sync_node->inputs["depth_aligned"]);
   dai.color_cam_out->link(dai.stereo_depth_node->inputAlignTo);
-
   dai.queue = dai.sync_node->out.createOutputQueue(1, false);
   
-  
+  if (imu.enable)
+  {
+    dai.imu_node = dai.pipeline->create<dai::node::IMU>();
+    dai.imu_node->enableIMUSensor({dai::IMUSensor::ACCELEROMETER_RAW, dai::IMUSensor::GYROSCOPE_RAW}, imu.rate);
+    dai.imu_node->setBatchReportThreshold(1);
+    dai.imu_node->setMaxBatchReports(10);
+
+    dai.imu_queue = dai.imu_node->out.createOutputQueue(1, true);
+  }
+
   auto calib_data = dai.device->readCalibration();
   auto intrinsics = calib_data.getCameraIntrinsics(
     dai::CameraBoardSocket::CAM_A, 
-    capture.color.width, 
+    capture.color.width,
     capture.color.height
   );
   
@@ -70,6 +78,33 @@ void DepthaiStreamer::run()
   signal(SIGTERM, handle_signal);
   signal(SIGINT, handle_signal);
 
+  std::thread imu_thread([this]() {
+    while (keep_running.load() && imu.enable)
+    {
+      auto imu_data = dai.imu_queue->get<dai::IMUData>();
+
+      for(const auto& packet : imu_data->packets) {
+
+        sensor_msgs::msg::Imu msg;
+
+        auto accel = packet.acceleroMeter;
+        auto gyro  = packet.gyroscope;
+
+        msg.header.stamp = now();
+        msg.header.frame_id = imu.frame;
+
+        msg.linear_acceleration.x = accel.x;
+        msg.linear_acceleration.y = accel.y;
+        msg.linear_acceleration.z = -accel.z;
+
+        msg.angular_velocity.x = gyro.x;
+        msg.angular_velocity.y = gyro.y;
+        msg.angular_velocity.z = -gyro.z;
+
+        imu.publisher->publish(msg);
+      }
+    }
+  });
 
   RCLCPP_INFO(get_logger(), "Camera opened");
   
@@ -108,10 +143,10 @@ void DepthaiStreamer::run()
         image.msg.width = capture.color.width;
         image.msg.depth_scale = 0.001;
 
-        image.msg.fx = 100;
-        image.msg.fy = 100;
-        image.msg.ppx = 100;
-        image.msg.ppy = 100;
+        image.msg.fx = cam_info.k[0];
+        image.msg.fy = cam_info.k[4];
+        image.msg.ppx = cam_info.k[2];
+        image.msg.ppy = cam_info.k[5];
 
         image.msg.bgr_data.resize(capture.color.width * capture.color.height * 3);
         memcpy(image.msg.bgr_data.data(), color_frame.data, capture.color.width * capture.color.height * 3);
@@ -125,6 +160,8 @@ void DepthaiStreamer::run()
 
     }
   }
+
+  imu_thread.join();
 
   dai.pipeline->stop();
   dai.pipeline->wait();

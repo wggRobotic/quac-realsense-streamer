@@ -24,6 +24,18 @@ CamStreamer::CamStreamer(const std::string& name) : Node(name)
 
   }
 
+  //imu
+  {
+    declare_parameter<bool>("imu.enable", false);
+    imu.enable = get_parameter("imu.enable").as_bool();
+
+    declare_parameter<std::string>("imu.frame", "cam_imu_frame");
+    imu.frame = get_parameter("imu.frame").as_string();
+
+    declare_parameter<int>("imu.rate", 30);
+    imu.rate = get_parameter("imu.rate").as_int();
+  }
+
   //gst
   {
     declare_parameter<int>("gst.port", 5000);
@@ -85,10 +97,23 @@ CamStreamer::CamStreamer(const std::string& name) : Node(name)
       gst.ip_set = true;
     }
   );
-  if (image.enable) image.publisher = create_publisher<quac_interfaces::msg::ImageBGRD>(
-    std::string(get_name()) + "/bgrd", 
-    rclcpp::QoS(2).best_effort().durability_volatile()
+
+  if (imu.enable) imu.publisher = create_publisher<sensor_msgs::msg::Imu>(
+    std::string(get_name()) + "/imu", 
+    rclcpp::QoS(2).durability_volatile()
   );
+
+  if (image.enable)
+  {
+    image.publisher = create_publisher<quac_interfaces::msg::ImageBGRD>(
+      std::string(get_name()) + "/bgrd", 
+      rclcpp::QoS(2).best_effort().durability_volatile()
+    );
+    image.rtabmap_publisher = create_publisher<rtabmap_msgs::msg::RGBDImage>(
+      std::string(get_name()) + "/rtabmap_rgbd", 
+      rclcpp::QoS(2)
+    );
+  }
   if (pointcloud.enable) pointcloud.publisher = create_publisher<sensor_msgs::msg::PointCloud2>(
     std::string(get_name()) + "/points", 
     rclcpp::QoS(2).best_effort().durability_volatile()
@@ -160,17 +185,18 @@ void CamStreamer::push_gst_frame(void* data)
       else if (gst.compression == "h264")
       {
         pipeline_desc =
-          "appsrc name=appsrc format=time "
-          "caps=video/x-raw,format=BGR,width=" + std::to_string(capture.color.width) +
-          ",height=" + std::to_string(capture.color.height) +
-          ",framerate=" + std::to_string(capture.fps) + "/1 "
-          "! videoconvert "
-          "! x264enc speed-preset=ultrafast tune=zerolatency "
-          " bitrate=" + std::to_string(gst.h264.bitrate) +
-          " key-int-max=" + std::to_string(gst.h264.key_int_max) + " "
-          "! rtph264pay pt=96 config-interval=1 "
-          "! udpsink host=" + gst.ip +
-          " port=" + std::to_string(gst.port) + " sync=false";
+        "appsrc name=appsrc is-live=true block=false format=time do-timestamp=true "
+        "caps=video/x-raw,format=BGR,width=" + std::to_string(capture.color.width) +
+        ",height=" + std::to_string(capture.color.height) +
+        ",framerate=" + std::to_string(capture.fps) + "/1 "
+        "! queue leaky=downstream max-size-buffers=1 max-size-time=0 max-size-bytes=0 "
+        "! videoconvert "
+        "! x264enc tune=zerolatency speed-preset=ultrafast key-int-max=" +
+          std::to_string(gst.h264.key_int_max) +
+        " bitrate=" + std::to_string(gst.h264.bitrate) + " "
+        "! rtph264pay pt=96 config-interval=1 "
+        "! udpsink host=" + gst.ip +
+        " port=" + std::to_string(gst.port) + " sync=false async=false";
       }
       else
       {

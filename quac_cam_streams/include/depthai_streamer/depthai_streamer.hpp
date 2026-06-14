@@ -32,6 +32,9 @@ public:
 
     std::shared_ptr<dai::node::PointCloud> pointcloud_node;
     std::shared_ptr<dai::MessageQueue> queue;
+
+    std::shared_ptr<dai::node::IMU> imu_node;
+    std::shared_ptr<dai::MessageQueue> imu_queue;
   } dai;
 
 };

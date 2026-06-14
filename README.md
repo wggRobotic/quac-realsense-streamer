@@ -10,6 +10,7 @@ Streams video over udp with gstreamer and high resolution bgrd images and pointc
 ### Publishers
 - `<_node_name>/bgrd` : `quac_interfaces/msg/ImageBGRD`
 - `<_node_name>/points` : `sensor_msgs/msg/PointCloud2`
+- `<_node_name>/imu` : `sensor_msgs/msg/Imu`
 
 ### Parameters
 
@@ -38,10 +39,16 @@ pointcloud:
   enable: bool                # whether to enable pointcloud publishing
   interval: int               # interval in all frames in which pointcloud is published
   frame: String               # tf frame of depth camera
+
 image:
   enable: bool                # whether to enable bgrd image publishing
   interval: int               # interval in all frames in which bgrd image is published
   frame: String               # tf frame of color camera
+
+imu:
+  enable: bool                # whether to enable the imu, if the device has one
+  rate: int                   # rate of which imu is polled in hz
+  frame: String               # tf frame of the imu
 ```
 
 ## realsense_streamer : cam_streamer

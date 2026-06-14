@@ -27,6 +27,7 @@ endif()
 if(BUILD_REALSENSE_STREAMER)
 
 find_package(PkgConfig REQUIRED)
+find_package(OpenCV REQUIRED)
 pkg_check_modules(GST REQUIRED gstreamer-1.0)
 pkg_check_modules(GST_APP REQUIRED gstreamer-app-1.0)
 find_package(realsense2 REQUIRED)
@@ -37,6 +38,7 @@ find_package(std_msgs)
 find_package(sensor_msgs)
 find_package(geometry_msgs REQUIRED)
 find_package(quac_interfaces REQUIRED)
+find_package(rtabmap_msgs REQUIRED)
 
 add_executable(realsense_streamer
   src/cam_streamer.cpp
@@ -46,6 +48,7 @@ add_executable(realsense_streamer
 target_include_directories(realsense_streamer PRIVATE
   ${GST_INCLUDE_DIRS}
   ${realsense2_INCLUDE_DIR}
+  ${OPENCV_INCLUDE_DIRS}
   include/
 )
 
@@ -53,6 +56,7 @@ target_link_libraries(realsense_streamer
   ${GST_LIBRARIES}
   ${GST_APP_LIBRARIES}
   ${realsense2_LIBRARY}
+  ${OpenCV_LIBS}
 )
 
 ament_target_dependencies(realsense_streamer
@@ -60,6 +64,7 @@ ament_target_dependencies(realsense_streamer
   std_msgs
   sensor_msgs
   quac_interfaces
+  rtabmap_msgs
 )
 
 install(
@@ -87,6 +92,7 @@ find_package(std_msgs)
 find_package(sensor_msgs)
 find_package(geometry_msgs REQUIRED)
 find_package(quac_interfaces REQUIRED)
+find_package(rtabmap_msgs REQUIRED)
 
 add_executable(depthai_streamer
   src/cam_streamer.cpp
@@ -111,6 +117,7 @@ ament_target_dependencies(depthai_streamer
   std_msgs
   sensor_msgs
   quac_interfaces
+  rtabmap_msgs
 )
 
 install(

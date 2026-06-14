@@ -1,11 +1,14 @@
 #include <rclcpp/rclcpp.hpp>
+#include <rtabmap_msgs/msg/detail/rgbd_image__struct.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <quac_interfaces/msg/image_bgrd.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
+#include <sensor_msgs/msg/imu.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
+#include <rtabmap_msgs/msg/rgbd_image.hpp>
 
 class CamStreamer : public rclcpp::Node
 {
@@ -28,6 +31,14 @@ public:
     int fps;
     std::string device_id;
   } capture;
+
+  struct
+  {
+    bool enable;
+    std::string frame;
+    int rate;
+    rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr publisher;
+  } imu;
 
   struct
   {
@@ -72,7 +83,7 @@ public:
     int interval_i;
 
     rclcpp::Publisher<quac_interfaces::msg::ImageBGRD>::SharedPtr publisher;
-    quac_interfaces::msg::ImageBGRD msg;
+    rclcpp::Publisher<rtabmap_msgs::msg::RGBDImage>::SharedPtr rtabmap_publisher;
   } image;
 
   rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr cam_info_publisher;

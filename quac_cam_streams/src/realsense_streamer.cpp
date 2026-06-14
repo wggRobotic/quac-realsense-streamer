@@ -1,4 +1,5 @@
 #include "realsense_streamer/realsense_streamer.hpp"
+#include <opencv4/opencv2/opencv.hpp>
 
 std::atomic<bool> keep_running{true};
 void handle_signal(int signum) { keep_running.store(false); }
@@ -144,14 +145,51 @@ void RealsenseStreamer::run()
     rs2_intrinsics color_intr = color_profile.get_intrinsics();
 
     sensor_msgs::msg::CameraInfo cam_info;
+    
     cam_info.header.stamp = now();
     cam_info.header.frame_id = image.frame;
-    cam_info.width = capture.color.width;
-    cam_info.height = capture.color.height;
-    cam_info.k[0] = color_intr.fx;
-    cam_info.k[2] = color_intr.ppx;
-    cam_info.k[4] = color_intr.fy;
-    cam_info.k[5] = color_intr.ppy;
+    cam_info.width = color_intr.width;
+    cam_info.height = color_intr.height;
+
+    cam_info.k.at(0) = color_intr.fx;
+    cam_info.k.at(2) = color_intr.ppx;
+    cam_info.k.at(4) = color_intr.fy;
+    cam_info.k.at(5) = color_intr.ppy;
+    cam_info.k.at(8) = 1;
+
+    cam_info.p.at(0) = cam_info.k.at(0);
+    cam_info.p.at(1) = 0;
+    cam_info.p.at(2) = cam_info.k.at(2);
+    cam_info.p.at(3) = 0;
+    cam_info.p.at(4) = 0;
+    cam_info.p.at(5) = cam_info.k.at(4);
+    cam_info.p.at(6) = cam_info.k.at(5);
+    cam_info.p.at(7) = 0;
+    cam_info.p.at(8) = 0;
+    cam_info.p.at(9) = 0;
+    cam_info.p.at(10) = 1;
+    cam_info.p.at(11) = 0;
+
+    cam_info.r.at(0) = 1.0;
+    cam_info.r.at(1) = 0.0;
+    cam_info.r.at(2) = 0.0;
+    cam_info.r.at(3) = 0.0;
+    cam_info.r.at(4) = 1.0;
+    cam_info.r.at(5) = 0.0;
+    cam_info.r.at(6) = 0.0;
+    cam_info.r.at(7) = 0.0;
+    cam_info.r.at(8) = 1.0;
+
+    int coeff_size(5);
+    if (color_intr.model == RS2_DISTORTION_KANNALA_BRANDT4)
+    {
+      cam_info.distortion_model = "equidistant";
+      coeff_size = 4;
+    }
+    else cam_info.distortion_model = "plumb_bob";
+
+    cam_info.d.resize(coeff_size);
+    for (int i = 0; i < coeff_size; i++) cam_info.d.at(i) = color_intr.coeffs[i];
 
     cam_info_publisher->publish(cam_info);
     
@@ -163,23 +201,68 @@ void RealsenseStreamer::run()
 
       if (!aligned_depth_frame) continue;
 
-      image.msg.header = cam_info.header;
-      image.msg.height = capture.color.height;
-      image.msg.width = capture.color.width;
-      image.msg.depth_scale = aligned_depth_frame.get_units();
+      if (image.publisher->get_subscription_count())
+      {
+        quac_interfaces::msg::ImageBGRD msg;
 
-      image.msg.fx = color_intr.fx;
-      image.msg.fy = color_intr.fy;
-      image.msg.ppx = color_intr.ppx;
-      image.msg.ppy = color_intr.ppy;
+        msg.header = cam_info.header;
+        msg.height = capture.color.height;
+        msg.width = capture.color.width;
+        msg.depth_scale = aligned_depth_frame.get_units();
 
-      image.msg.bgr_data.resize(capture.color.width * capture.color.height * 3);
-      memcpy(image.msg.bgr_data.data(), color_frame.get_data(), capture.color.width * capture.color.height * 3);
+        msg.fx = color_intr.fx;
+        msg.fy = color_intr.fy;
+        msg.ppx = color_intr.ppx;
+        msg.ppy = color_intr.ppy;
 
-      image.msg.depth_data.resize(capture.color.width * capture.color.height);
-      memcpy(image.msg.depth_data.data(), aligned_depth_frame.get_data(), capture.color.width * capture.color.height * 2);
+        msg.bgr_data.resize(capture.color.width * capture.color.height * 3);
+        memcpy(msg.bgr_data.data(), color_frame.get_data(), capture.color.width * capture.color.height * 3);
 
-      image.publisher->publish(image.msg);
+        msg.depth_data.resize(capture.color.width * capture.color.height);
+        memcpy(msg.depth_data.data(), aligned_depth_frame.get_data(), capture.color.width * capture.color.height * 2);
+
+        image.publisher->publish(msg);
+      }
+
+      if(image.rtabmap_publisher->get_subscription_count())
+      {
+        rtabmap_msgs::msg::RGBDImage msg;
+        msg.header = cam_info.header;
+        msg.rgb_camera_info = cam_info;
+        msg.depth_camera_info = cam_info;
+
+        msg.depth_camera_info.p.at(3) = 0;
+        msg.depth_camera_info.p.at(7) = 0;
+
+        cv::Mat bgr(capture.color.height, capture.color.width, CV_8UC3, (void*)color_frame.get_data());
+
+        cv::Mat rgb;
+        cv::cvtColor(bgr, rgb, cv::COLOR_BGR2RGB);
+
+        msg.rgb.header = cam_info.header;
+        msg.rgb.height = capture.color.height;
+        msg.rgb.width  = capture.color.width;
+        msg.rgb.encoding = "rgb8";
+        msg.rgb.is_bigendian = false;
+        msg.rgb.step = static_cast<sensor_msgs::msg::Image::_step_type>(rgb.step);
+        msg.rgb.data.resize(capture.color.width * capture.color.height * 3);
+        memcpy(msg.rgb.data.data(), rgb.data, capture.color.width * capture.color.height * 3);
+
+        cv::Mat depth(capture.color.height, capture.color.width, CV_8UC2, (void*)aligned_depth_frame.get_data());
+
+        msg.depth.header = cam_info.header;
+        msg.depth.height = capture.color.height;
+        msg.depth.width  = capture.color.width;
+
+        msg.depth.encoding = "16UC1";
+        msg.depth.is_bigendian = false;
+        msg.depth.step = static_cast<sensor_msgs::msg::Image::_step_type>(depth.step);
+        msg.depth.data.resize(capture.color.width * capture.color.height * 2);
+        memcpy(msg.depth.data.data(), depth.data, capture.color.width * capture.color.height * 2);
+
+
+        image.rtabmap_publisher->publish(msg);
+      }
     }
 
     if (image.enable) image.interval_i = (image.interval_i + 1) % image.interval;
