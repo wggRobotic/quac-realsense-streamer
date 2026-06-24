@@ -137,24 +137,26 @@ void DepthaiStreamer::run()
       // image
       if (image.interval_i == 0 && image.enable)
       {
-        image.msg.header = cam_info.header;
+        quac_interfaces::msg::ImageBGRD msg;
 
-        image.msg.height = capture.color.height;
-        image.msg.width = capture.color.width;
-        image.msg.depth_scale = 0.001;
+        msg.header = cam_info.header;
 
-        image.msg.fx = cam_info.k[0];
-        image.msg.fy = cam_info.k[4];
-        image.msg.ppx = cam_info.k[2];
-        image.msg.ppy = cam_info.k[5];
+        msg.height = capture.color.height;
+        msg.width = capture.color.width;
+        msg.depth_scale = 0.001;
 
-        image.msg.bgr_data.resize(capture.color.width * capture.color.height * 3);
-        memcpy(image.msg.bgr_data.data(), color_frame.data, capture.color.width * capture.color.height * 3);
+        msg.fx = cam_info.k[0];
+        msg.fy = cam_info.k[4];
+        msg.ppx = cam_info.k[2];
+        msg.ppy = cam_info.k[5];
 
-        image.msg.depth_data.resize(capture.color.width * capture.color.height);
-        memcpy(image.msg.depth_data.data(), depth_frame.data, capture.color.width * capture.color.height * 2);
+        msg.bgr_data.resize(capture.color.width * capture.color.height * 3);
+        memcpy(msg.bgr_data.data(), color_frame.data, capture.color.width * capture.color.height * 3);
 
-        image.publisher->publish(image.msg);
+        msg.depth_data.resize(capture.color.width * capture.color.height);
+        memcpy(msg.depth_data.data(), depth_frame.data, capture.color.width * capture.color.height * 2);
+
+        image.publisher->publish(msg);
       }
       if (image.enable) image.interval_i = (image.interval_i + 1) % image.interval;
 
